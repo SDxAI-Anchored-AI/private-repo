@@ -8,6 +8,14 @@ let nextConfig = {
     HAS_SERVER_KEY_PRODIA: !!process.env.PRODIA_API_KEY,
     HAS_SERVER_KEYS_GOOGLE_CSE: !!process.env.GOOGLE_CLOUD_API_KEY && !!process.env.GOOGLE_CSE_ID,
   },
+  rewrites: async () => {
+    return [
+      {
+        source: '/api/python/:path*',
+        destination: process.env.NODE_ENV === 'development' ? 'http://127.0.0.1:8000/api/python/:path*' : '/api/python/',
+      },
+    ];
+  },
   webpack(config, { isServer, dev }) {
     // @mui/joy: anything material gets redirected to Joy
     config.resolve.alias['@mui/material'] = '@mui/joy';
