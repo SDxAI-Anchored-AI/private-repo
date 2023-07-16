@@ -2,3 +2,5 @@ gradio_client>=0.2.9
 fastapi==0.100.0
 uvicorn[standard]
 pydantic==2.0.3
+rdflib
+openai
