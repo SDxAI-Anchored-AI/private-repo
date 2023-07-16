@@ -13,12 +13,17 @@ import { DMessage, useChatStore } from '~/common/state/store-chats';
 
 import { createAssistantTypingMessage, updatePurposeInHistory } from './editors';
 
-
 /**
  * The main "chat" function. TODO: this is here so we can soon move it to the data model.
  */
-export async function runAssistantUpdatingState(conversationId: string, history: DMessage[], assistantLlmId: DLLMId, systemPurpose: SystemPurposeId, _autoTitle: boolean, _autoSuggestions: boolean) {
-
+export async function runAssistantUpdatingState(
+  conversationId: string,
+  history: DMessage[],
+  assistantLlmId: DLLMId,
+  systemPurpose: SystemPurposeId,
+  _autoTitle: boolean,
+  _autoSuggestions: boolean,
+) {
   // update the system message from the active Purpose, if not manually edited
   history = updatePurposeInHistory(conversationId, history, systemPurpose);
 
@@ -36,19 +41,17 @@ export async function runAssistantUpdatingState(conversationId: string, history:
   startTyping(conversationId, null);
 
   // update text, if needed
-  if (_autoTitle)
-    await autoTitle(conversationId);
+  if (_autoTitle) await autoTitle(conversationId);
 }
 
-
 async function streamAssistantMessage(
-  conversationId: string, assistantMessageId: string,
+  conversationId: string,
+  assistantMessageId: string,
   history: DMessage[],
   llmId: DLLMId,
   editMessage: (conversationId: string, messageId: string, updatedMessage: Partial<DMessage>, touch: boolean) => void,
   abortSignal: AbortSignal,
 ) {
-
   // access params
   const llm = findLLMOrThrow(llmId);
   const oaiSetup: Partial<SourceSetupOpenAI> = llm._source.setup as Partial<SourceSetupOpenAI>;
@@ -65,10 +68,12 @@ async function streamAssistantMessage(
       temperature: llmTemperature,
       maxTokens: llmResponseTokens,
     },
-    history: history.map(({ role, text }) => ({
-      role: role,
-      content: text,
-    })),
+    history: history
+      .filter((m) => m.ignoreMessageInTokenCount !== true)
+      .map(({ role, text }) => ({
+        role: role,
+        content: text,
+      })),
   };
 
   // other params
@@ -83,8 +88,7 @@ async function streamAssistantMessage(
 
       const issues = moderationResult.results.reduce((acc, result) => {
         if (result.flagged) {
-          Object
-            .entries(result.categories)
+          Object.entries(result.categories)
             .filter(([_, value]) => value)
             .forEach(([key, _]) => acc.add(key));
         }
@@ -93,7 +97,7 @@ async function streamAssistantMessage(
 
       // if there's any perceived violation, we stop here
       if (issues.size) {
-        const categoriesText = [...issues].map(c => `\`${c}\``).join(', ');
+        const categoriesText = [...issues].map((c) => `\`${c}\``).join(', ');
         editMessage(
           conversationId,
           assistantMessageId,
@@ -107,14 +111,18 @@ async function streamAssistantMessage(
         return;
       }
     } catch (error: any) {
-      editMessage(conversationId, assistantMessageId, { text: `[Issue] There was an error while checking for harmful content. ${error?.toString()}`, typing: false }, false);
+      editMessage(
+        conversationId,
+        assistantMessageId,
+        { text: `[Issue] There was an error while checking for harmful content. ${error?.toString()}`, typing: false },
+        false,
+      );
       // as the moderation check was requested, we cannot proceed in case of error
       return;
     }
   }
 
   try {
-
     const response = await fetch('/api/llms/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -162,8 +170,7 @@ async function streamAssistantMessage(
       // if the first paragraph (after the first packet) is complete, call the callback
       if (parsedFirstPacket && shallSpeakFirstLine && !sentFirstParagraph) {
         let cutPoint = incrementalText.lastIndexOf('\n');
-        if (cutPoint < 0)
-          cutPoint = incrementalText.lastIndexOf('. ');
+        if (cutPoint < 0) cutPoint = incrementalText.lastIndexOf('. ');
         if (cutPoint > 100 && cutPoint < 400) {
           sentFirstParagraph = true;
           const firstParagraph = incrementalText.substring(0, cutPoint);
@@ -173,7 +180,6 @@ async function streamAssistantMessage(
 
       editMessage(conversationId, assistantMessageId, { text: incrementalText }, false);
     }
-
   } catch (error: any) {
     if (error?.name === 'AbortError') {
       // expected, the user clicked the "stop" button

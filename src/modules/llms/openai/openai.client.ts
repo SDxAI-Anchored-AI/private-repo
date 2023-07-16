@@ -4,11 +4,9 @@ import type { DLLM } from '../llm.types';
 import type { VChatFunctionIn, VChatMessageIn, VChatMessageOrFunctionCallOut, VChatMessageOut } from '../llm.client';
 import { normalizeOAISetup, SourceSetupOpenAI } from './openai.vendor';
 
-
 export const hasServerKeyOpenAI = !!process.env.HAS_SERVER_KEY_OPENAI;
 
 export const isValidOpenAIApiKey = (apiKey?: string) => !!apiKey && apiKey.startsWith('sk-') && apiKey.length > 40;
-
 
 export async function openAICallChat(llm: DLLM, messages: VChatMessageIn[], maxTokens?: number) {
   return openAICallChatOverloaded<VChatMessageOut>(llm, messages, null, maxTokens);
@@ -18,11 +16,15 @@ export async function openAICallChatWithFunctions(llm: DLLM, messages: VChatMess
   return openAICallChatOverloaded<VChatMessageOrFunctionCallOut>(llm, messages, functions, maxTokens);
 }
 
-
 /**
  * This function either returns the LLM message, or function calls, or throws a descriptive error string
  */
-async function openAICallChatOverloaded<TOut = VChatMessageOut | VChatMessageOrFunctionCallOut>(llm: DLLM, messages: VChatMessageIn[], functions: VChatFunctionIn[] | null, maxTokens?: number): Promise<TOut> {
+async function openAICallChatOverloaded<TOut = VChatMessageOut | VChatMessageOrFunctionCallOut>(
+  llm: DLLM,
+  messages: VChatMessageIn[],
+  functions: VChatFunctionIn[] | null,
+  maxTokens?: number,
+): Promise<TOut> {
   // access params (source)
   const partialSetup = llm._source.setup as Partial<SourceSetupOpenAI>;
   const sourceSetupOpenAI = normalizeOAISetup(partialSetup);
@@ -32,7 +34,7 @@ async function openAICallChatOverloaded<TOut = VChatMessageOut | VChatMessageOrF
   const modelTemperature = llm.options.llmTemperature || 0.5;
 
   try {
-    return await apiAsync.openai.chatGenerateWithFunctions.mutate({
+    return (await apiAsync.openai.chatGenerateWithFunctions.mutate({
       access: sourceSetupOpenAI,
       model: {
         id: openaiLlmRef,
@@ -41,7 +43,7 @@ async function openAICallChatOverloaded<TOut = VChatMessageOut | VChatMessageOrF
       },
       functions: functions ?? undefined,
       history: messages,
-    }) as TOut;
+    })) as TOut;
     // errorMessage = `issue fetching: ${response.status} · ${response.statusText}${errorPayload ? ' · ' + JSON.stringify(errorPayload) : ''}`;
   } catch (error: any) {
     const errorMessage = error?.message || error?.toString() || 'OpenAI Chat Fetch Error';

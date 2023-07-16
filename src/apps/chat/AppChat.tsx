@@ -6,6 +6,7 @@ import { useTheme } from '@mui/joy';
 import type { PublishedSchema } from '~/modules/publish/publish.router';
 import { CmdRunProdia } from '~/modules/prodia/prodia.client';
 import { CmdRunReact } from '~/modules/aifn/react/react';
+import { CmdRunGenerateImage } from '~/modules/generate_image/generate_image.client';
 import { PublishedModal } from '~/modules/publish/PublishedModal';
 import { apiAsync } from '~/modules/trpc/trpc.client';
 import { imaginePromptFromText } from '~/modules/aifn/imagine/imaginePromptFromText';
@@ -29,16 +30,15 @@ import { Ephemerals } from './components/Ephemerals';
 import { ImportedModal, ImportedOutcome } from './components/appbar/ImportedModal';
 import { restoreConversationFromJson } from './exportImport';
 import { runAssistantUpdatingState } from './editors/chat-stream';
-import { runImageGenerationUpdatingState } from './editors/image-generate';
+import { runGroundedImageGenerationUpdatingState, runImageGenerationUpdatingState } from './editors/image-generate';
 import { runReActUpdatingState } from './editors/react-tangent';
-
 
 const SPECIAL_ID_ALL_CHATS = 'all-chats';
 
 // definition of chat modes
 export type ChatModeId = 'immediate' | 'immediate-follow-up' | 'react' | 'write-user';
 export const ChatModeItems: { [key in ChatModeId]: { label: string; description: string | React.JSX.Element; experimental?: boolean } } = {
-  'immediate': {
+  immediate: {
     label: 'Chat',
     description: 'AI-powered responses',
   },
@@ -47,7 +47,7 @@ export const ChatModeItems: { [key in ChatModeId]: { label: string; description:
     description: 'Chat with follow-up questions',
     experimental: true,
   },
-  'react': {
+  react: {
     label: 'Reason+Act',
     description: 'Answer your questions with ReAct and search',
   },
@@ -57,21 +57,16 @@ export const ChatModeItems: { [key in ChatModeId]: { label: string; description:
   },
 };
 
-
 /// Returns a pretty link to the current page, for promo
 function linkToOrigin() {
-  let origin = (typeof window !== 'undefined') ? window.location.href : '';
-  if (!origin || origin.includes('//localhost'))
-    origin = Brand.URIs.OpenRepo;
+  let origin = typeof window !== 'undefined' ? window.location.href : '';
+  if (!origin || origin.includes('//localhost')) origin = Brand.URIs.OpenRepo;
   origin = origin.replace('https://', '');
-  if (origin.endsWith('/'))
-    origin = origin.slice(0, -1);
+  if (origin.endsWith('/')) origin = origin.slice(0, -1);
   return origin;
 }
 
-
 export function AppChat() {
-
   // state
   const [chatModeId, setChatModeId] = React.useState<ChatModeId>('immediate');
   const [isMessageSelectionMode, setIsMessageSelectionMode] = React.useState(false);
@@ -84,8 +79,17 @@ export function AppChat() {
 
   // external state
   const theme = useTheme();
-  const { activeConversationId, isConversationEmpty, conversationsCount, importConversation, deleteAllConversations, setMessages, systemPurposeId, setAutoTitle } = useChatStore(state => {
-    const conversation = state.conversations.find(conversation => conversation.id === state.activeConversationId);
+  const {
+    activeConversationId,
+    isConversationEmpty,
+    conversationsCount,
+    importConversation,
+    deleteAllConversations,
+    setMessages,
+    systemPurposeId,
+    setAutoTitle,
+  } = useChatStore((state) => {
+    const conversation = state.conversations.find((conversation) => conversation.id === state.activeConversationId);
     return {
       activeConversationId: state.activeConversationId,
       isConversationEmpty: conversation ? !conversation.messages.length : true,
@@ -98,7 +102,6 @@ export function AppChat() {
     };
   }, shallow);
 
-
   const handleExecuteConversation = async (chatModeId: ChatModeId, conversationId: string, history: DMessage[]) => {
     const { chatLLMId } = useModelsStore.getState();
     if (!conversationId || !chatLLMId) return;
@@ -110,6 +113,13 @@ export function AppChat() {
       if (pieces.length == 2 && pieces[0].type === 'cmd' && pieces[1].type === 'text') {
         const command = pieces[0].value;
         const prompt = pieces[1].value;
+
+        if (CmdRunGenerateImage.includes(command)) {
+          setMessages(conversationId, history);
+
+          const message = await runGroundedImageGenerationUpdatingState(conversationId, prompt, lastMessage?.messageProps);
+          return message;
+        }
         if (CmdRunProdia.includes(command)) {
           setMessages(conversationId, history);
           return await runImageGenerationUpdatingState(conversationId, prompt);
@@ -128,8 +138,7 @@ export function AppChat() {
         case 'immediate-follow-up':
           return await runAssistantUpdatingState(conversationId, history, chatLLMId, systemPurposeId, true, chatModeId === 'immediate-follow-up');
         case 'react':
-          if (!lastMessage?.text)
-            break;
+          if (!lastMessage?.text) break;
           setMessages(conversationId, history);
           return await runReActUpdatingState(conversationId, lastMessage.text, chatLLMId);
         case 'write-user':
@@ -143,16 +152,15 @@ export function AppChat() {
   };
 
   const _findConversation = (conversationId: string) =>
-    conversationId ? useChatStore.getState().conversations.find(c => c.id === conversationId) ?? null : null;
+    conversationId ? useChatStore.getState().conversations.find((c) => c.id === conversationId) ?? null : null;
 
-  const handleSendUserMessage = async (conversationId: string, userText: string) => {
+  const handleSendUserMessage = async (conversationId: string, userText: string, messageProps?: unknown) => {
     const conversation = _findConversation(conversationId);
     if (conversation)
-      return await handleExecuteConversation(chatModeId, conversationId, [...conversation.messages, createDMessage('user', userText)]);
+      return await handleExecuteConversation(chatModeId, conversationId, [...conversation.messages, createDMessage('user', userText, messageProps)]);
   };
 
-  const handleExecuteChatHistory = async (conversationId: string, history: DMessage[]) =>
-    await handleExecuteConversation(chatModeId, conversationId, history);
+  const handleExecuteChatHistory = async (conversationId: string, history: DMessage[]) => await handleExecuteConversation(chatModeId, conversationId, history);
 
   const handleImagineFromText = async (conversationId: string, messageText: string) => {
     const conversation = _findConversation(conversationId);
@@ -162,7 +170,6 @@ export function AppChat() {
         return await handleExecuteConversation('immediate', conversationId, [...conversation.messages, createDMessage('user', `${CmdRunProdia[0]} ${prompt}`)]);
     }
   };
-
 
   const handleClearConversation = (conversationId: string) => setClearConfirmationId(conversationId);
 
@@ -180,7 +187,7 @@ export function AppChat() {
     if (deleteConfirmationId) {
       if (deleteConfirmationId === SPECIAL_ID_ALL_CHATS) {
         deleteAllConversations();
-      }// else
+      } // else
       //  deleteConversation(deleteConfirmationId);
       setDeleteConfirmationId(null);
     }
@@ -215,8 +222,7 @@ export function AppChat() {
 
   const handleImportConversationFromFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target?.files;
-    if (!files || files.length < 1)
-      return;
+    if (!files || files.length < 1) return;
 
     // try to restore conversations from the selected files
     const outcomes: ImportedOutcome = { conversations: [] };
@@ -244,32 +250,34 @@ export function AppChat() {
     e.target.value = '';
   };
 
-
   // Pluggable ApplicationBar components
 
-  const dropdowns = React.useMemo(() =>
-      <Dropdowns conversationId={activeConversationId} />,
-    [activeConversationId],
-  );
+  const dropdowns = React.useMemo(() => <Dropdowns conversationId={activeConversationId} />, [activeConversationId]);
 
   const conversationsBadge = conversationsCount < 2 ? 0 : conversationsCount;
 
-  const conversationItems = React.useMemo(() =>
+  const conversationItems = React.useMemo(
+    () => (
       <ConversationItems
         conversationId={activeConversationId}
         onImportConversation={handleImportConversation}
         onDeleteAllConversations={handleDeleteAllConversations}
-      />,
+      />
+    ),
     [activeConversationId],
   );
 
-  const actionItems = React.useMemo(() =>
+  const actionItems = React.useMemo(
+    () => (
       <ChatContextItems
-        conversationId={activeConversationId} isConversationEmpty={isConversationEmpty}
-        isMessageSelectionMode={isMessageSelectionMode} setIsMessageSelectionMode={setIsMessageSelectionMode}
+        conversationId={activeConversationId}
+        isConversationEmpty={isConversationEmpty}
+        isMessageSelectionMode={isMessageSelectionMode}
+        setIsMessageSelectionMode={setIsMessageSelectionMode}
         onClearConversation={handleClearConversation}
         onPublishConversation={handlePublishConversation}
-      />,
+      />
+    ),
     [activeConversationId, isConversationEmpty, isMessageSelectionMode],
   );
 
@@ -278,77 +286,90 @@ export function AppChat() {
     return () => useApplicationBarStore.getState().unregisterClientComponents();
   }, [dropdowns, conversationsBadge, conversationItems, actionItems]);
 
-  return <>
+  return (
+    <>
+      <ChatMessageList
+        conversationId={activeConversationId}
+        isMessageSelectionMode={isMessageSelectionMode}
+        setIsMessageSelectionMode={setIsMessageSelectionMode}
+        onExecuteChatHistory={handleExecuteChatHistory}
+        onImagineFromText={handleImagineFromText}
+        sx={{
+          flexGrow: 1,
+          background: theme.vars.palette.background.level2,
+          overflowY: 'auto', // overflowY: 'hidden'
+          minHeight: 96,
+        }}
+      />
 
-    <ChatMessageList
-      conversationId={activeConversationId}
-      isMessageSelectionMode={isMessageSelectionMode} setIsMessageSelectionMode={setIsMessageSelectionMode}
-      onExecuteChatHistory={handleExecuteChatHistory}
-      onImagineFromText={handleImagineFromText}
-      sx={{
-        flexGrow: 1,
-        background: theme.vars.palette.background.level2,
-        overflowY: 'auto', // overflowY: 'hidden'
-        minHeight: 96,
-      }} />
+      <Ephemerals
+        conversationId={activeConversationId}
+        sx={{
+          // flexGrow: 0.1,
+          flexShrink: 0.5,
+          overflowY: 'auto',
+          minHeight: 64,
+        }}
+      />
 
-    <Ephemerals
-      conversationId={activeConversationId}
-      sx={{
-        // flexGrow: 0.1,
-        flexShrink: 0.5,
-        overflowY: 'auto',
-        minHeight: 64,
-      }} />
+      <Composer
+        conversationId={activeConversationId}
+        messageId={null}
+        chatModeId={chatModeId}
+        setChatModeId={setChatModeId}
+        isDeveloperMode={systemPurposeId === 'Developer'}
+        onSendMessage={handleSendUserMessage}
+        sx={{
+          zIndex: 21, // position: 'sticky', bottom: 0,
+          background: theme.vars.palette.background.surface,
+          borderTop: `1px solid ${theme.vars.palette.divider}`,
+          p: { xs: 1, md: 2 },
+        }}
+      />
 
-    <Composer
-      conversationId={activeConversationId} messageId={null}
-      chatModeId={chatModeId} setChatModeId={setChatModeId}
-      isDeveloperMode={systemPurposeId === 'Developer'}
-      onSendMessage={handleSendUserMessage}
-      sx={{
-        zIndex: 21, // position: 'sticky', bottom: 0,
-        background: theme.vars.palette.background.surface,
-        borderTop: `1px solid ${theme.vars.palette.divider}`,
-        p: { xs: 1, md: 2 },
-      }} />
+      {/* Import Chat */}
+      <input type="file" multiple hidden accept=".json" ref={conversationFileInputRef} onChange={handleImportConversationFromFiles} />
+      {!!conversationImportOutcome && <ImportedModal open outcome={conversationImportOutcome} onClose={() => setConversationImportOutcome(null)} />}
 
+      {/* Clear */}
+      <ConfirmationModal
+        open={!!clearConfirmationId}
+        onClose={() => setClearConfirmationId(null)}
+        onPositive={handleConfirmedClearConversation}
+        confirmationText={'Are you sure you want to discard all the messages?'}
+        positiveActionText={'Clear conversation'}
+      />
 
-    {/* Import Chat */}
-    <input type='file' multiple hidden accept='.json' ref={conversationFileInputRef} onChange={handleImportConversationFromFiles} />
-    {!!conversationImportOutcome && (
-      <ImportedModal open outcome={conversationImportOutcome} onClose={() => setConversationImportOutcome(null)} />
-    )}
+      {/* Deletion */}
+      <ConfirmationModal
+        open={!!deleteConfirmationId}
+        onClose={() => setDeleteConfirmationId(null)}
+        onPositive={handleConfirmedDeleteConversation}
+        confirmationText={
+          deleteConfirmationId === SPECIAL_ID_ALL_CHATS
+            ? 'Are you absolutely sure you want to delete ALL conversations? This action cannot be undone.'
+            : 'Are you sure you want to delete this conversation?'
+        }
+        positiveActionText={deleteConfirmationId === SPECIAL_ID_ALL_CHATS ? 'Yes, delete all' : 'Delete conversation'}
+      />
 
-    {/* Clear */}
-    <ConfirmationModal
-      open={!!clearConfirmationId} onClose={() => setClearConfirmationId(null)} onPositive={handleConfirmedClearConversation}
-      confirmationText={'Are you sure you want to discard all the messages?'} positiveActionText={'Clear conversation'}
-    />
-
-    {/* Deletion */}
-    <ConfirmationModal
-      open={!!deleteConfirmationId} onClose={() => setDeleteConfirmationId(null)} onPositive={handleConfirmedDeleteConversation}
-      confirmationText={deleteConfirmationId === SPECIAL_ID_ALL_CHATS
-        ? 'Are you absolutely sure you want to delete ALL conversations? This action cannot be undone.'
-        : 'Are you sure you want to delete this conversation?'}
-      positiveActionText={deleteConfirmationId === SPECIAL_ID_ALL_CHATS
-        ? 'Yes, delete all'
-        : 'Delete conversation'}
-    />
-
-    {/* Publishing */}
-    <ConfirmationModal
-      open={!!publishConversationId} onClose={() => setPublishConversationId(null)} onPositive={handleConfirmedPublishConversation}
-      confirmationText={<>
-        Share your conversation anonymously on <Link href='https://paste.gg' target='_blank'>paste.gg</Link>?
-        It will be unlisted and available to share and read for 30 days. Keep in mind, deletion may not be possible.
-        Are you sure you want to proceed?
-      </>} positiveActionText={'Understood, upload to paste.gg'}
-    />
-    {!!publishResponse && (
-      <PublishedModal open onClose={() => setPublishResponse(null)} response={publishResponse} />
-    )}
-
-  </>;
+      {/* Publishing */}
+      <ConfirmationModal
+        open={!!publishConversationId}
+        onClose={() => setPublishConversationId(null)}
+        onPositive={handleConfirmedPublishConversation}
+        confirmationText={
+          <>
+            Share your conversation anonymously on{' '}
+            <Link href="https://paste.gg" target="_blank">
+              paste.gg
+            </Link>
+            ? It will be unlisted and available to share and read for 30 days. Keep in mind, deletion may not be possible. Are you sure you want to proceed?
+          </>
+        }
+        positiveActionText={'Understood, upload to paste.gg'}
+      />
+      {!!publishResponse && <PublishedModal open onClose={() => setPublishResponse(null)} response={publishResponse} />}
+    </>
+  );
 }
