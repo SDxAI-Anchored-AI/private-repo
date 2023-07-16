@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from gradio_client import Client
 from pydantic import BaseModel
+from grounded_llm import get_response_grounded, get_response_ungrounded
 
 client = Client("https://longlian-llm-grounded-diffusion.hf.space/")
 
@@ -17,6 +18,22 @@ async def hello():
 @app.get("/api/python/hello")
 async def hello():
     return {"message": "Hello"}
+
+class message_details(BaseModel):
+	prompt: str
+	kg_sentences: str
+	previous_messages: list
+
+@app.post('/api/python/llm-ungrounded')
+async def get_ungrounded_llm_response(message_details: message_details):
+	# TODO update the kg_sentences and previous_messages functions
+	return get_response_ungrounded(message_details.prompt)
+
+@app.post('/api/python/llm-grounded')
+async def get_grounded_llm_response(message_details: message_details):
+	# TODO update the kg_sentences and previous_messages functions
+	return get_response_grounded(message_details.prompt)
+
 
 class groundedDiffusionStep1Input(BaseModel):
     prompt: str
