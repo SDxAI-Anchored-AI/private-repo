@@ -166,34 +166,6 @@ export async function runGroundedImageGenerationUpdatingState(conversationId: st
       return { name, response: res };
     });
 
-    // we can also upload the files to local storage if they are too big
-
-    // const baselineFileUploadRes = await fetch('/api/llms/upload-image', {
-    //   method: 'POST',
-    //   headers: {
-    //     'Content-Type': 'application/json',
-    //   },
-    //   body: JSON.stringify({
-    //     base64: baselineRes, // base64 image data
-    //     name: 'baseline',
-    //   }),
-    // }).then((res) => {
-    //   return res.json();
-    // });
-
-    // const layoutImgFileUploadRes = await fetch('/api/llms/upload-image', {
-    //   method: 'POST',
-    //   headers: {
-    //     'Content-Type': 'application/json',
-    //   },
-    //   body: JSON.stringify({
-    //     base64: layoutToImgRes, // base64 image data
-    //     name: 'layout-to-image',
-    //   }),
-    // }).then((res) => {
-    //   return res.json();
-    // });
-
     const baseLineIndex = results.findIndex((r) => r.name === 'baseline');
     const layoutIndex = results.findIndex((r) => r.name === 'layout');
     const groundedImageIndex = results.findIndex((r) => r.name === 'groundedImage');
@@ -203,15 +175,57 @@ export async function runGroundedImageGenerationUpdatingState(conversationId: st
     } else {
       let finalMessage = '';
       if (baseLineIndex > -1) {
+        // const baselineFileUploadRes = await fetch('/api/llms/upload-image', {
+        //   method: 'POST',
+        //   headers: {
+        //     'Content-Type': 'application/json',
+        //   },
+        //   body: JSON.stringify({
+        //     base64: results?.[baseLineIndex]?.response, // base64 image data
+        //     name: 'baseline',
+        //   }),
+        // }).then((res) => {
+        //   return res.json();
+        // });
+
+        // console.log('baselineFileUploadRes', baselineFileUploadRes);
+        // we can also upload the files to local storage if they are too big
         finalMessage += `Stable Diffusion Baseline:\n<base64start>${results?.[baseLineIndex]?.response}<base64end>\n`;
       }
       if (layoutIndex > -1) {
+        // const layoutImgFileUploadRes = await fetch('/api/llms/upload-image', {
+        //   method: 'POST',
+        //   headers: {
+        //     'Content-Type': 'application/json',
+        //   },
+        //   body: JSON.stringify({
+        //     base64: results?.[layoutIndex]?.response, // base64 image data
+        //     name: 'layout-to-image',
+        //   }),
+        // }).then((res) => {
+        //   return res.json();
+        // });
+        // console.log('layoutImgFileUploadRes', layoutImgFileUploadRes);
         finalMessage += `Grounded Layout:\n<base64start>${results?.[layoutIndex]?.response}<base64end>\n`;
       }
       if (groundedImageIndex > -1) {
+        // const groundedImgFileUploadRes = await fetch('/api/llms/upload-image', {
+        //   method: 'POST',
+        //   headers: {
+        //     'Content-Type': 'application/json',
+        //   },
+        //   body: JSON.stringify({
+        //     base64: results?.[groundedImageIndex]?.response, // base64 image data
+        //     name: 'layout-to-image',
+        //   }),
+        // }).then((res) => {
+        //   return res.json();
+        // });
+        // console.log('groundedImgFileUploadRes', groundedImgFileUploadRes);
         finalMessage += `Grounded Stable Diffusion Image:\n<base64start>${results?.[groundedImageIndex]?.response}<base64end>`;
       }
       editMessage(conversationId, assistantMessageId, { text: finalMessage, typing: false }, false);
+      return;
     }
   } catch (error: any) {
     console.log('error', error);

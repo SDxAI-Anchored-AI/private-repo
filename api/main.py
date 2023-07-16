@@ -9,8 +9,6 @@ import openai
 import re
 from rdflib import Graph
 
-openai.api_key = os.environ['OPENAI_API_KEY']
-
 g = Graph()
 
 all_messages = [
@@ -70,21 +68,23 @@ def set_all_messages(messages):
   all_messages = messages
 
 
-def get_response_ungrounded(prompt):
+def get_response_ungrounded(prompt, oaiKey, previous_messages):
   global all_messages
   all_messages.append({"role": "user", "content": prompt})
 
+  openai.api_key = oaiKey
+
   output = openai.ChatCompletion.create(
       model="gpt-3.5-turbo",
-      messages= all_messages
+      messages= previous_messages
   )
   bot_response = output["choices"][0]["message"]["content"]
   all_messages.append({"role": "assistant", "content": bot_response})
 
-  return bot_response
+  return {bot_response}
 
 
-def get_response_grounded(prompt):
+def get_response_grounded(prompt, oaiKey, previous_messages):
   global all_messages
   add_info_to_graph(g, "Baer hasn't viewed fracture_reports. ")
   
@@ -92,18 +92,18 @@ def get_response_grounded(prompt):
   all_messages.append({"role": "assistant", "content": context})
   all_messages.append({"role": "user", "content": prompt})
 
-  
+  openai.api_key = oaiKey
 
   output = openai.ChatCompletion.create(
       model="gpt-3.5-turbo",
-      messages= all_messages
+      messages= previous_messages
   )
   bot_response = output["choices"][0]["message"]["content"]
   # print(context)
   
   all_messages.append({"role": "assistant", "content": bot_response})
 
-  return bot_response
+  return {bot_response}
 
 
 client = Client("https://michaelcreatesstuff-llm-grounded-diffusion.hf.space/")
@@ -123,19 +123,22 @@ async def hello():
     return {"message": "Hello"}
       
 class message_details(BaseModel):
-	prompt: str
-	kg_sentences: str
-	previous_messages: list
+    prompt: str
+    oaiKey: str
+    previous_messages: list
+	# kg_sentences: str
 
-@app.post('/api/python/llm-ungrounded')
+@app.post('/api/python/llm-ungrounded-endpoint')
 async def get_ungrounded_llm_response(message_details: message_details):
+    print(message_details)
 	# TODO update the kg_sentences and previous_messages functions
-	return grounded_llm.get_response_ungrounded(message_details.prompt)
+    return get_response_ungrounded(message_details.prompt, message_details.oaiKey, message_details.previous_messages)
 
-@app.post('/api/python/llm-grounded')
+@app.post('/api/python/llm-grounded-endpoint')
 async def get_grounded_llm_response(message_details: message_details):
+    print(message_details)
 	# TODO update the kg_sentences and previous_messages functions
-	return grounded_llm.get_response_grounded(message_details.prompt)
+    return get_response_grounded(message_details.prompt,message_details.oaiKey, message_details.previous_messages)
 
 
 class diffusionStepInput(BaseModel):

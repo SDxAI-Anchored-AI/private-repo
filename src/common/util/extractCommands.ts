@@ -1,9 +1,10 @@
 import { CmdRunProdia } from '~/modules/prodia/prodia.client';
 import { CmdRunGenerateImage } from '~/modules/generate_image/generate_image.client';
+import { CmdRunGrounded } from '~/modules/grounding/grounding.client';
 import { CmdRunReact } from '~/modules/aifn/react/react';
 import { CmdRunSearch } from '~/modules/google/search.client';
 
-export const commands = [...CmdRunGenerateImage, ...CmdRunProdia, ...CmdRunSearch, ...CmdRunReact];
+export const commands = [...CmdRunGrounded, ...CmdRunGenerateImage, ...CmdRunProdia, ...CmdRunSearch, ...CmdRunReact];
 
 export interface SentencePiece {
   type: 'text' | 'cmd';

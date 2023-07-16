@@ -12,7 +12,7 @@ export default async function handler(req: any, res: any) {
     try {
       const base64Data = base64[0];
       const imageBuffer = Buffer.from(base64Data, 'base64');
-      const imagePath = path.join(process.cwd(), 'assets', 'images', `image-${name}${Date.now()}.png`);
+      const imagePath = path.join('assets', 'images', `image-${name}${Date.now()}.png`);
       await fs.promises.writeFile(imagePath, imageBuffer);
 
       res.status(200).json({ message: 'Image uploaded!', imagePath });

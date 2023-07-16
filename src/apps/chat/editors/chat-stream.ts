@@ -23,6 +23,7 @@ export async function runAssistantUpdatingState(
   systemPurpose: SystemPurposeId,
   _autoTitle: boolean,
   _autoSuggestions: boolean,
+  groundingComparison = false,
 ) {
   // update the system message from the active Purpose, if not manually edited
   history = updatePurposeInHistory(conversationId, history, systemPurpose);
@@ -35,7 +36,7 @@ export async function runAssistantUpdatingState(
   const { startTyping, editMessage } = useChatStore.getState();
   startTyping(conversationId, controller);
 
-  await streamAssistantMessage(conversationId, assistantMessageId, history, assistantLlmId, editMessage, controller.signal);
+  await streamAssistantMessage(conversationId, assistantMessageId, history, assistantLlmId, editMessage, controller.signal, groundingComparison);
 
   // clear to send, again
   startTyping(conversationId, null);
@@ -51,6 +52,7 @@ async function streamAssistantMessage(
   llmId: DLLMId,
   editMessage: (conversationId: string, messageId: string, updatedMessage: Partial<DMessage>, touch: boolean) => void,
   abortSignal: AbortSignal,
+  groundingComparison = false,
 ) {
   // access params
   const llm = findLLMOrThrow(llmId);
@@ -122,70 +124,113 @@ async function streamAssistantMessage(
     }
   }
 
-  try {
-    const response = await fetch('/api/llms/stream', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
-      signal: abortSignal,
-    });
+  if (groundingComparison) {
+    const message_details = {
+      oaiKey: input?.access?.oaiKey,
+      prompt: lastMessage?.content.slice('/comparegrounding'.length),
+      previous_messages: input?.history,
+    };
 
-    if (!response.ok || !response.body) {
-      const errorMessage = response.body ? await response.text() : 'No response from server';
-      editMessage(conversationId, assistantMessageId, { text: errorMessage, typing: false }, false);
+    try {
+      const ungroundedResponse = await fetch('/api/python/llm-ungrounded-endpoint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(message_details),
+        signal: abortSignal,
+      }).then((res) => {
+        return res.json();
+      });
+
+      const groundedResponse = await fetch('/api/python/llm-grounded-endpoint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(message_details),
+        signal: abortSignal,
+      }).then((res) => {
+        return res.json();
+      });
+
+      editMessage(
+        conversationId,
+        assistantMessageId,
+        { text: `Ungrounded response: ${ungroundedResponse}\n\nGrounded response: ${groundedResponse}`, typing: false },
+        false,
+      );
       return;
+    } catch (error: any) {
+      if (error?.name === 'AbortError') {
+        // expected, the user clicked the "stop" button
+      } else {
+        // TODO: show an error to the UI
+        console.error('Fetch request error:', error);
+      }
     }
+  } else {
+    try {
+      const response = await fetch('/api/llms/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+        signal: abortSignal,
+      });
 
-    const responseReader = response.body.getReader();
-    const textDecoder = new TextDecoder('utf-8');
+      if (!response.ok || !response.body) {
+        const errorMessage = response.body ? await response.text() : 'No response from server';
+        editMessage(conversationId, assistantMessageId, { text: errorMessage, typing: false }, false);
+        return;
+      }
 
-    // loop forever until the read is done, or the abort controller is triggered
-    let incrementalText = '';
-    let parsedFirstPacket = false;
-    let sentFirstParagraph = false;
-    while (true) {
-      const { value, done } = await responseReader.read();
+      const responseReader = response.body.getReader();
+      const textDecoder = new TextDecoder('utf-8');
 
-      if (done) break;
+      // loop forever until the read is done, or the abort controller is triggered
+      let incrementalText = '';
+      let parsedFirstPacket = false;
+      let sentFirstParagraph = false;
+      while (true) {
+        const { value, done } = await responseReader.read();
 
-      incrementalText += textDecoder.decode(value, { stream: true });
+        if (done) break;
 
-      // there may be a JSON object at the beginning of the message, which contains the model name (streaming workaround)
-      if (!parsedFirstPacket && incrementalText.startsWith('{')) {
-        const endOfJson = incrementalText.indexOf('}');
-        if (endOfJson > 0) {
-          const json = incrementalText.substring(0, endOfJson + 1);
-          incrementalText = incrementalText.substring(endOfJson + 1);
-          try {
-            const parsed: OpenAI.API.Chat.StreamingFirstResponse = JSON.parse(json);
-            editMessage(conversationId, assistantMessageId, { originLLM: parsed.model }, false);
-            parsedFirstPacket = true;
-          } catch (e) {
-            // error parsing JSON, ignore
-            console.log('Error parsing JSON: ' + e);
+        incrementalText += textDecoder.decode(value, { stream: true });
+
+        // there may be a JSON object at the beginning of the message, which contains the model name (streaming workaround)
+        if (!parsedFirstPacket && incrementalText.startsWith('{')) {
+          const endOfJson = incrementalText.indexOf('}');
+          if (endOfJson > 0) {
+            const json = incrementalText.substring(0, endOfJson + 1);
+            incrementalText = incrementalText.substring(endOfJson + 1);
+            try {
+              const parsed: OpenAI.API.Chat.StreamingFirstResponse = JSON.parse(json);
+              editMessage(conversationId, assistantMessageId, { originLLM: parsed.model }, false);
+              parsedFirstPacket = true;
+            } catch (e) {
+              // error parsing JSON, ignore
+              console.log('Error parsing JSON: ' + e);
+            }
           }
         }
-      }
 
-      // if the first paragraph (after the first packet) is complete, call the callback
-      if (parsedFirstPacket && shallSpeakFirstLine && !sentFirstParagraph) {
-        let cutPoint = incrementalText.lastIndexOf('\n');
-        if (cutPoint < 0) cutPoint = incrementalText.lastIndexOf('. ');
-        if (cutPoint > 100 && cutPoint < 400) {
-          sentFirstParagraph = true;
-          const firstParagraph = incrementalText.substring(0, cutPoint);
-          speakText(firstParagraph).then(() => false /* fire and forget, we don't want to stall this loop */);
+        // if the first paragraph (after the first packet) is complete, call the callback
+        if (parsedFirstPacket && shallSpeakFirstLine && !sentFirstParagraph) {
+          let cutPoint = incrementalText.lastIndexOf('\n');
+          if (cutPoint < 0) cutPoint = incrementalText.lastIndexOf('. ');
+          if (cutPoint > 100 && cutPoint < 400) {
+            sentFirstParagraph = true;
+            const firstParagraph = incrementalText.substring(0, cutPoint);
+            speakText(firstParagraph).then(() => false /* fire and forget, we don't want to stall this loop */);
+          }
         }
-      }
 
-      editMessage(conversationId, assistantMessageId, { text: incrementalText }, false);
-    }
-  } catch (error: any) {
-    if (error?.name === 'AbortError') {
-      // expected, the user clicked the "stop" button
-    } else {
-      // TODO: show an error to the UI
-      console.error('Fetch request error:', error);
+        editMessage(conversationId, assistantMessageId, { text: incrementalText }, false);
+      }
+    } catch (error: any) {
+      if (error?.name === 'AbortError') {
+        // expected, the user clicked the "stop" button
+      } else {
+        // TODO: show an error to the UI
+        console.error('Fetch request error:', error);
+      }
     }
   }
 

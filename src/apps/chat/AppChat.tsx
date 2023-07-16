@@ -32,6 +32,7 @@ import { restoreConversationFromJson } from './exportImport';
 import { runAssistantUpdatingState } from './editors/chat-stream';
 import { runGroundedImageGenerationUpdatingState, runImageGenerationUpdatingState } from './editors/image-generate';
 import { runReActUpdatingState } from './editors/react-tangent';
+import { CmdRunGrounded } from '~/modules/grounding/grounding.client';
 
 const SPECIAL_ID_ALL_CHATS = 'all-chats';
 
@@ -113,6 +114,20 @@ export function AppChat() {
       if (pieces.length == 2 && pieces[0].type === 'cmd' && pieces[1].type === 'text') {
         const command = pieces[0].value;
         const prompt = pieces[1].value;
+
+        if (CmdRunGrounded.includes(command)) {
+          setMessages(conversationId, history);
+          return await runAssistantUpdatingState(
+            conversationId,
+            history,
+            chatLLMId,
+            systemPurposeId ?? 'Generic',
+            true,
+            chatModeId === 'immediate-follow-up',
+            // flag for grounding comparison
+            true,
+          );
+        }
 
         if (CmdRunGenerateImage.includes(command)) {
           setMessages(conversationId, history);
