@@ -37,7 +37,7 @@ export function ImageGenModal(props: {
         />
         {/* <Divider sx={{ my: 2 }} /> */}
         <Typography>
-          Number of denoising steps{' '}
+          Number of denoising steps: {denoisingSteps}&nbsp;
           <Tooltip variant="solid" placement="top-start" title="Set to &gt;=50 for higher generation quality">
             <InfoIcon />
           </Tooltip>
@@ -54,7 +54,7 @@ export function ImageGenModal(props: {
         />
 
         <Typography>
-          Foreground frozen steps ratio{' '}
+          Foreground frozen steps ratio: {frozenStepsRatio}&nbsp;
           <Tooltip
             variant="solid"
             placement="top-start"

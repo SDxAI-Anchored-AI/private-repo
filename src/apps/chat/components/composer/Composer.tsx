@@ -548,7 +548,7 @@ export function Composer(props: {
                 </Button>
               </Tooltip>
 
-              {/* <IconButton variant="plain" color="neutral" onClick={handleGenerateImageClicked} sx={{ ...hideOnDesktop }}>
+              <IconButton variant="plain" color="neutral" onClick={handleGenerateImageClicked} sx={{ ...hideOnDesktop }}>
                 <ContentPasteGoIcon />
               </IconButton>
 
@@ -561,7 +561,7 @@ export function Composer(props: {
                 sx={{ ...hideOnMobile, justifyContent: 'flex-start' }}
               >
                 Generate Image
-              </Button> */}
+              </Button>
 
               <input type="file" multiple hidden ref={attachmentFileInputRef} onChange={handleLoadAttachment} />
             </Box>
