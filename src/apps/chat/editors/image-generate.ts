@@ -112,16 +112,32 @@ export async function runGroundedImageGenerationUpdatingState(conversationId: st
 
     const promises = [];
 
-    promises.push({
-      name: 'layout',
-      promise: fetch('/api/python/llm-grounded-diffusion-visualize-layout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: fullPrompt }),
-      }).then((res) => {
-        return res.json();
-      }),
+    const visualizeLayoutResult = await fetch('/api/python/llm-grounded-diffusion-visualize-layout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: fullPrompt }),
+    }).then((res) => {
+      return res.json();
     });
+
+    const baselineResult = await fetch('/api/python/llm-grounded-diffusion-baseline', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: imageText }),
+    }).then((res) => {
+      return res.json();
+    });
+
+    // promises.push({
+    //   name: 'layout',
+    //   promise: fetch('/api/python/llm-grounded-diffusion-visualize-layout', {
+    //     method: 'POST',
+    //     headers: { 'Content-Type': 'application/json' },
+    //     body: JSON.stringify({ prompt: fullPrompt }),
+    //   }).then((res) => {
+    //     return res.json();
+    //   }),
+    // });
 
     if (typeof messageProps === 'object' && Object.keys(messageProps || {}).length > 0) {
       promises.push({
@@ -147,24 +163,28 @@ export async function runGroundedImageGenerationUpdatingState(conversationId: st
       });
     }
 
-    promises.push({
-      name: 'baseline',
-      promise: fetch('/api/python/llm-grounded-diffusion-baseline', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: imageText }),
-      }).then((res) => {
-        return res.json();
-      }),
-    });
+    // promises.push({
+    //   name: 'baseline',
+    //   promise: fetch('/api/python/llm-grounded-diffusion-baseline', {
+    //     method: 'POST',
+    //     headers: { 'Content-Type': 'application/json' },
+    //     body: JSON.stringify({ prompt: imageText }),
+    //   }).then((res) => {
+    //     return res.json();
+    //   }),
+    // });
 
-    const { results, errors } = await PromisePool.for(promises).process(async (p, index, pool) => {
-      const { name, promise } = p;
+    const { results, errors } = await PromisePool.for(promises)
+      // hack for working with fastapi
+      .withTaskTimeout(90000)
+      .withConcurrency(1)
+      .process(async (p, index, pool) => {
+        const { name, promise } = p;
 
-      const res = await promise;
+        const res = await promise;
 
-      return { name, response: res };
-    });
+        return { name, response: res };
+      });
 
     // we can also upload the files to local storage if they are too big
 
@@ -194,20 +214,20 @@ export async function runGroundedImageGenerationUpdatingState(conversationId: st
     //   return res.json();
     // });
 
-    const baseLineIndex = results.findIndex((r) => r.name === 'baseline');
-    const layoutIndex = results.findIndex((r) => r.name === 'layout');
+    // const baseLineIndex = results.findIndex((r) => r.name === 'baseline');
+    // const layoutIndex = results.findIndex((r) => r.name === 'layout');
     const groundedImageIndex = results.findIndex((r) => r.name === 'groundedImage');
     console.log('results?.[groundedImageIndex]?.response', results?.[groundedImageIndex]?.response);
 
-    if (baseLineIndex === -1 && layoutIndex === -1 && groundedImageIndex === -1) {
+    if (!baselineResult && !visualizeLayoutResult && groundedImageIndex === -1) {
       editMessage(conversationId, assistantMessageId, { text: `Sorry, I couldn't create an image for you.`, typing: false }, false);
     } else {
       let finalMessage = '';
-      if (baseLineIndex > -1) {
-        finalMessage += `Stable Diffusion Baseline:\n<base64start>${results?.[baseLineIndex]?.response}<base64end>\n`;
+      if (baselineResult) {
+        finalMessage += `Stable Diffusion Baseline:\n<base64start>${baselineResult}<base64end>\n`;
       }
-      if (layoutIndex > -1) {
-        finalMessage += `Grounded Layout:\n<base64start>${results?.[layoutIndex]?.response}<base64end>\n`;
+      if (visualizeLayoutResult) {
+        finalMessage += `Grounded Layout:\n<base64start>${visualizeLayoutResult}<base64end>\n`;
       }
       if (groundedImageIndex > -1) {
         finalMessage += `Grounded Stable Diffusion Image:\n<base64start>${results?.[groundedImageIndex]?.response}<base64end>`;
