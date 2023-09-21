@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from gradio_client import Client
 from pydantic import BaseModel
+from typing import Optional
 
 client = Client("https://michaelcreatesstuff-llm-grounded-diffusion.hf.space/")
 
@@ -23,8 +24,8 @@ class diffusionStepInput(BaseModel):
 
 class groundedDiffusionStepInput(BaseModel):
     prompt: str
-    denoisingSteps: int
-    frozenStepsRatio: float
+    denoisingSteps: Optional[int] = None
+    frozenStepsRatio: Optional[float] = None
 
 grounded_diffusion_template = """You are an intelligent bounding box generator. I will provide you with a caption for a photo, image, or painting. Your task is to generate the bounding boxes for the objects mentioned in the caption, along with a background prompt describing the scene. The images are of size 512x512, and the bounding boxes should not overlap or go beyond the image boundaries. Each bounding box should be in the format of (object name, [top-left x coordinate, top-left y coordinate, box width, box height]) and include exactly one object. Make the boxes larger if possible. Do not put objects that are already provided in the bounding boxes into the background prompt. If needed, you can make reasonable guesses. Generate the object descriptions and background prompts in English even if the caption might not be in English. Do not include non-existing or excluded objects in the background prompt. Please refer to the example below for the desired format.
 

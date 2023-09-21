@@ -197,6 +197,7 @@ export async function runGroundedImageGenerationUpdatingState(conversationId: st
     const baseLineIndex = results.findIndex((r) => r.name === 'baseline');
     const layoutIndex = results.findIndex((r) => r.name === 'layout');
     const groundedImageIndex = results.findIndex((r) => r.name === 'groundedImage');
+    console.log('results?.[groundedImageIndex]?.response', results?.[groundedImageIndex]?.response);
 
     if (baseLineIndex === -1 && layoutIndex === -1 && groundedImageIndex === -1) {
       editMessage(conversationId, assistantMessageId, { text: `Sorry, I couldn't create an image for you.`, typing: false }, false);
