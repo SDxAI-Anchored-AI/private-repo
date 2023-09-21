@@ -6,7 +6,7 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
 
-import { MAX_CONVERSATIONS, useChatStore } from '~/common/state/store-chats';
+import { useChatStore } from '~/common/state/store-chats';
 import { useApplicationBarStore } from '~/common/layouts/appbar/store-applicationbar';
 import { useUIPreferencesStore } from '~/common/state/store-ui';
 
@@ -36,7 +36,7 @@ export function ConversationItems(props: {
 
   const hasChats = conversationIDs.length > 0;
   const singleChat = conversationIDs.length === 1;
-  const maxReached = conversationIDs.length >= MAX_CONVERSATIONS;
+  const softMaxReached = conversationIDs.length >= 50;
 
   const closeAppMenu = () => useApplicationBarStore.getState().setAppMenuAnchor(null);
 
@@ -60,8 +60,6 @@ export function ConversationItems(props: {
       deleteConversation(conversationId);
   }, [deleteConversation, singleChat]);
 
-  const NewPrefix = maxReached && <Tooltip title={`Maximum limit: ${MAX_CONVERSATIONS} chats. Proceeding will remove the oldest chat.`}><Box sx={{ mr: 2 }}>⚠️</Box></Tooltip>;
-
   return <>
 
     {/*<ListItem>*/}
@@ -70,9 +68,9 @@ export function ConversationItems(props: {
     {/*  </Typography>*/}
     {/*</ListItem>*/}
 
-    <MenuItem disabled={maxReached || (!!topNewConversationId && topNewConversationId === props.conversationId)} onClick={handleNew}>
+    <MenuItem disabled={softMaxReached || (!!topNewConversationId && topNewConversationId === props.conversationId)} onClick={handleNew}>
       <ListItemDecorator><AddIcon /></ListItemDecorator>
-      {NewPrefix}New
+      New
     </MenuItem>
 
     <ListDivider />

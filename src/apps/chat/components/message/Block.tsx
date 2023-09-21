@@ -13,26 +13,44 @@ import 'prismjs/components/prism-typescript';
 // theme
 import 'prismjs/themes/prism.css';
 
-
-export type Block = TextBlock | CodeBlock | ImageBlock | HtmlBlock;
-export type TextBlock = { type: 'text'; content: string; };
-export type CodeBlock = { type: 'code'; content: string; language: string | null; complete: boolean; code: string; };
-export type ImageBlock = { type: 'image'; url: string; };
-export type HtmlBlock = { type: 'html'; html: string; };
-
+export type Block = any;
+export type TextBlock = { type: 'text'; content: string };
+export type CodeBlock = { type: 'code'; content: string; language: string | null; complete: boolean; code: string };
+export type ImageBlock = { type: 'image'; url: any };
+export type BlobBlock = { type: 'blob'; url: any };
+export type HtmlBlock = { type: 'html'; html: string };
 
 /**
  * TODO: expensive function, especially as it's not been used in incremental fashion
  */
 export const parseBlocks = (forceText: boolean, text: string): Block[] => {
-  if (forceText)
-    return [{ type: 'text', content: text }];
+  if (forceText) return [{ type: 'text', content: text }];
 
   if (text.startsWith('https://images.prodia.xyz/') && text.endsWith('.png') && text.length > 60 && text.length < 70)
     return [{ type: 'image', url: text.trim() }];
 
-  if (text.startsWith('<!DOCTYPE html') || text.startsWith('<head>\n'))
-    return [{ type: 'html', html: text }];
+  if (text.includes('<base64start>') && text.includes('<base64end>')) {
+    const regex = /<base64start>([A-Za-z0-9+/=]+)<base64end>/g;
+    const result = text.split(regex);
+
+    const resultArray = result.map((item) => {
+      // hack lol
+      const oneMillion = 1000000;
+      if (item.length > oneMillion) {
+        const b64 = item.replace(/<base64start>/g, '').replace(/<base64end>/g, '');
+        const blob = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+        const blobUrl = URL.createObjectURL(new Blob([blob]));
+        return { type: 'blob', url: blobUrl };
+      } else if (item.length > 100) {
+        return { type: 'image', url: `data:image/png;base64,${item}` };
+      } else {
+        return { type: 'text', content: item };
+      }
+    });
+    return resultArray;
+  }
+
+  if (text.startsWith('<!DOCTYPE html') || text.startsWith('<head>\n')) return [{ type: 'html', html: text }];
 
   const codeBlockRegex = /`{3,}([\w\\.+-_]+)?\n([\s\S]*?)(`{3,}|$)/g;
   const result: Block[] = [];
@@ -57,11 +75,7 @@ export const parseBlocks = (forceText: boolean, text: string): Block[] => {
 
     const codeLanguage = inferCodeLanguage(markdownLanguage, code);
     const highlightLanguage = codeLanguage || 'typescript';
-    const highlightedCode = Prism.highlight(
-      code,
-      Prism.languages[highlightLanguage] || Prism.languages.typescript,
-      highlightLanguage,
-    );
+    const highlightedCode = Prism.highlight(code, Prism.languages[highlightLanguage] || Prism.languages.typescript, highlightLanguage);
 
     result.push({ type: 'text', content: text.slice(lastIndex, match.index) });
     result.push({ type: 'code', content: highlightedCode, language: codeLanguage, complete: blockEnd.startsWith('```'), code });
@@ -75,25 +89,32 @@ export const parseBlocks = (forceText: boolean, text: string): Block[] => {
   return result;
 };
 
-
 function inferCodeLanguage(markdownLanguage: string, code: string): string | null {
   let detectedLanguage;
   // we have an hint
   if (markdownLanguage) {
     // no dot: assume is the syntax-highlight name
-    if (!markdownLanguage.includes('.'))
-      return markdownLanguage;
+    if (!markdownLanguage.includes('.')) return markdownLanguage;
 
     // dot: there's probably a file extension
     const extension = markdownLanguage.split('.').pop();
     if (extension) {
       const languageMap: { [key: string]: string } = {
-        cs: 'csharp', html: 'html', java: 'java', js: 'javascript', json: 'json', jsx: 'javascript',
-        md: 'markdown', py: 'python', sh: 'bash', ts: 'typescript', tsx: 'typescript', xml: 'xml',
+        cs: 'csharp',
+        html: 'html',
+        java: 'java',
+        js: 'javascript',
+        json: 'json',
+        jsx: 'javascript',
+        md: 'markdown',
+        py: 'python',
+        sh: 'bash',
+        ts: 'typescript',
+        tsx: 'typescript',
+        xml: 'xml',
       };
       detectedLanguage = languageMap[extension];
-      if (detectedLanguage)
-        return detectedLanguage;
+      if (detectedLanguage) return detectedLanguage;
     }
   }
 

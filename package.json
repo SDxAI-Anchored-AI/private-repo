@@ -6,7 +6,7 @@
     "node": "^18.0.0"
   },
   "scripts": {
-    "fastapi-dev": "pip3 install -r requirements.txt && python3 -m uvicorn api.main:app --reload",
+    "fastapi-dev": "pip3 install -r requirements.txt && python3 -m uvicorn api.main:app --reload --limit-concurrency 9",
     "next-dev": "next dev",
     "dev": "concurrently \"npm run next-dev\" \"npm run fastapi-dev\"",
     "build": "next build",
@@ -22,6 +22,7 @@
     "@mui/icons-material": "^5.14.0",
     "@mui/joy": "^5.0.0-alpha.87",
     "@next/bundle-analyzer": "^13.4.9",
+    "@supercharge/promise-pool": "^3.0.0",
     "@tanstack/react-query": "^4.29.19",
     "@trpc/client": "^10.34.0",
     "@trpc/next": "^10.34.0",
@@ -30,6 +31,7 @@
     "@vercel/analytics": "^1.0.1",
     "concurrently": "^8.0.1",
     "eventsource-parser": "^1.0.0",
+    "idb-keyval": "^6.2.1",
     "next": "^13.4.9",
     "pdfjs-dist": "3.8.162",
     "plantuml-encoder": "^1.4.0",
