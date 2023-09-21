@@ -13,11 +13,11 @@ import 'prismjs/components/prism-typescript';
 // theme
 import 'prismjs/themes/prism.css';
 
-export type Block = TextBlock | CodeBlock | ImageBlock | HtmlBlock | BlobBlock;
+export type Block = any;
 export type TextBlock = { type: 'text'; content: string };
 export type CodeBlock = { type: 'code'; content: string; language: string | null; complete: boolean; code: string };
-export type ImageBlock = { type: 'image'; url: string };
-export type BlobBlock = { type: 'blob'; url: string };
+export type ImageBlock = { type: 'image'; url: any };
+export type BlobBlock = { type: 'blob'; url: any };
 export type HtmlBlock = { type: 'html'; html: string };
 
 /**
